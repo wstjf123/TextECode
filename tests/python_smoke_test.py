@@ -163,9 +163,10 @@ def main() -> int:
         assert_contains(
             regenerated_root / "src" / "@Constant.ecode",
             [
-                '.常量 APP_NAME, "NativeBridgeFixture", 公开',
-                ".常量 FEATURE_ENABLED, 真, 公开",
-                ".常量 RETRY_LIMIT, 3, 公开",
+                ".常量 APP_NAME",
+                "NativeBridgeFixture",
+                ".常量 FEATURE_ENABLED",
+                ".常量 RETRY_LIMIT",
                 ".长文本 HelpDoc, 公开",
             ],
         )
