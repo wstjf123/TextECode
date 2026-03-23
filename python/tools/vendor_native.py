@@ -16,19 +16,17 @@ def main() -> int:
     package_dir = Path(__file__).resolve().parents[1] / "src" / "textecode" / "bin" / "win-x64"
     package_dir.mkdir(parents=True, exist_ok=True)
 
+    stale_pdb = package_dir / "TextECode.NativeBridge.pdb"
+    if stale_pdb.exists():
+        stale_pdb.unlink()
+
     required = ["TextECode.NativeBridge.dll"]
-    optional = ["TextECode.NativeBridge.pdb"]
 
     for name in required:
         source = source_dir / name
         if not source.is_file():
             raise FileNotFoundError(source)
         shutil.copy2(source, package_dir / name)
-
-    for name in optional:
-        source = source_dir / name
-        if source.is_file():
-            shutil.copy2(source, package_dir / name)
 
     print(package_dir)
     return 0
