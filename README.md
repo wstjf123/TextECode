@@ -31,6 +31,15 @@ XP用户无法使用本工具
 - `TextECode.exe restore Foo.eproject Foo.e` ：将 文本代码 还原为 `*.e` 文件
 - `TextECode.exe view Foo.eproject` ：临时将 文本代码 还原为 `*.e` 文件并打开易语言环境，将对 `*.e` 文件的修改**自动同步**回文本代码，且在易语言环境关闭后**自动删除** `*.e` 文件
 
+## Python
+仓库内提供了一个 Python 包工程，位于 `python/`，用于封装 `TextECode.NativeBridge.dll`：
+
+- `from textecode import generate, restore, version`
+- `textecode generate Foo.e Foo.eproject`
+- 当前仅支持 Windows `win-x64`
+
+Python wheel 的构建与测试工作流会直接复用当前 release 中的 NativeAOT DLL 产物，而不是重新编译 DLL。
+
 ## 注意
 本项目的生成及还原均不完善，可能造成数据损坏，**使用前请自行备份好源文件**，作者不对可能的损害负任何责任
 
