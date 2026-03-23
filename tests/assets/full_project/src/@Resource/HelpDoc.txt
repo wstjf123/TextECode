@@ -1,0 +1,2 @@
+Native bridge fixture document.
+This file verifies long text resource round trips.

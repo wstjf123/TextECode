@@ -1,0 +1,18 @@
+{
+  "Items": [
+    {
+      "Kind": "Elem",
+      "Name": "AppMain"
+    },
+    {
+      "Kind": "Folder",
+      "Name": "Features",
+      "Items": [
+        {
+          "Kind": "Elem",
+          "Name": "Helper"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+.程序集 AppMain, , 公开
+.程序集变量 InternalCounter, 整数型
+
+.子程序 RunDemo, , 公开
+.参数 userName, 文本型
+.局部变量 counter, 整数型
+.局部变量 isReady, 逻辑型
+.局部变量 currentPoint, Point
+
+counter = 1
+isReady = FEATURE_ENABLED
+InternalCounter = InternalCounter + 1
+GlobalCount = GlobalCount + 1
+currentPoint.X = counter
+currentPoint.Y = RETRY_LIMIT
+Helper.LogMessage (userName)
+Helper.LogMessage (HelpDoc)
+.如果 (isReady)
+    counter = counter + 1
+.否则
+    counter = 0
+.如果结束
+.判断开始
+.判断 (counter == 2)
+    GlobalCount = GlobalCount + 2
+.默认
+    GlobalCount = GlobalCount + 3
+.判断结束
+
+.子程序 ResetCounter
+
+InternalCounter = 0

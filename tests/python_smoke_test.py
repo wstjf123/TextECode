@@ -16,6 +16,29 @@ def read_and_free_utf8(lib, ptr):
         lib.textecode_free(ptr)
 
 
+def load_json(path):
+    return json.loads(path.read_text(encoding="utf-8-sig"))
+
+
+def list_relative_files(root):
+    files = []
+    for path in root.rglob("*"):
+        if path.is_file() and path.name != ".gitkeep":
+            files.append(path.relative_to(root).as_posix())
+    return sorted(files)
+
+
+def read_text(path):
+    return path.read_text(encoding="utf-8-sig").replace("\r\n", "\n")
+
+
+def assert_contains(path, markers):
+    content = read_text(path)
+    missing = [marker for marker in markers if marker not in content]
+    if missing:
+        raise AssertionError(f"{path.name} is missing markers: {missing}")
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         raise SystemExit("usage: python python_smoke_test.py <path-to-dll>")
@@ -58,15 +81,16 @@ def main() -> int:
     lib.textecode_generate.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
     lib.textecode_generate.restype = ctypes.c_int
 
-    fixture_dir = pathlib.Path(__file__).resolve().parent / "assets" / "minimal_project"
+    fixture_dir = pathlib.Path(__file__).resolve().parent / "assets" / "full_project"
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = pathlib.Path(tmp)
         case_dir = tmp_path / "case"
         shutil.copytree(fixture_dir, case_dir)
 
-        input_project = case_dir / "minimal.eproject"
+        input_project = case_dir / "full.eproject"
         restored_e = tmp_path / "roundtrip.e"
-        regenerated_project = tmp_path / "regenerated" / "roundtrip.eproject"
+        regenerated_root = tmp_path / "regenerated"
+        regenerated_project = regenerated_root / "full.eproject"
 
         rc = lib.textecode_restore(
             str(input_project).encode("utf-8"),
@@ -86,16 +110,94 @@ def main() -> int:
         if not regenerated_project.is_file():
             raise AssertionError("generate did not produce a project file")
 
-        generated_model = json.loads(regenerated_project.read_text(encoding="utf-8-sig"))
-        if generated_model.get("Name") != "NativeBridgeSmoke":
+        expected_files = list_relative_files(case_dir)
+        actual_files = list_relative_files(regenerated_root)
+        if actual_files != expected_files:
+            raise AssertionError(
+                "round-trip file set mismatch\n"
+                f"expected: {expected_files}\n"
+                f"actual: {actual_files}"
+            )
+
+        expected_model = load_json(case_dir / "full.eproject")
+        generated_model = load_json(regenerated_project)
+        if generated_model != expected_model:
+            raise AssertionError(
+                "round-trip project model mismatch\n"
+                f"expected: {expected_model}\n"
+                f"actual: {generated_model}"
+            )
+        if generated_model.get("Name") != "NativeBridgeFixture":
             raise AssertionError("round-trip project name mismatch")
         if not isinstance(generated_model.get("Dependencies"), list):
             raise AssertionError("generated project dependencies are missing")
 
+        expected_order = load_json(case_dir / "full.eproject.order")
+        generated_order = load_json(regenerated_root / "full.eproject.order")
+        if generated_order != expected_order:
+            raise AssertionError(
+                "round-trip order model mismatch\n"
+                f"expected: {expected_order}\n"
+                f"actual: {generated_order}"
+            )
+
+        if read_text(regenerated_root / "src" / "@Resource" / "HelpDoc.txt") != read_text(
+            case_dir / "src" / "@Resource" / "HelpDoc.txt"
+        ):
+            raise AssertionError("long text resource content mismatch")
+
+        assert_contains(
+            regenerated_root / "src" / "@Global.ecode",
+            [".全局变量 GlobalCount, 整数型, 公开"],
+        )
+        assert_contains(
+            regenerated_root / "src" / "@Struct.ecode",
+            [".数据类型 Point, 公开", ".成员 X, 整数型", ".成员 Y, 整数型"],
+        )
+        assert_contains(
+            regenerated_root / "src" / "@Constant.ecode",
+            [
+                '.常量 APP_NAME, "NativeBridgeFixture", 公开',
+                ".常量 FEATURE_ENABLED, 真, 公开",
+                ".常量 RETRY_LIMIT, 3, 公开",
+                ".长文本 HelpDoc, 公开",
+            ],
+        )
+        assert_contains(
+            regenerated_root / "src" / "AppMain.ecode",
+            [
+                ".程序集 AppMain, , 公开",
+                ".程序集变量 InternalCounter, 整数型",
+                ".子程序 RunDemo, , 公开",
+                ".参数 userName, 文本型",
+                ".局部变量 currentPoint, Point",
+                "Helper.LogMessage",
+                "HelpDoc",
+                ".如果 (isReady)",
+                ".否则",
+                ".如果结束",
+                ".判断开始",
+                ".判断 (counter == 2)",
+                ".默认",
+                ".判断结束",
+            ],
+        )
+        assert_contains(
+            regenerated_root / "src" / "Features" / "Helper.ecode",
+            [
+                ".程序集 Helper, , 公开",
+                ".子程序 LogMessage, , 公开",
+                ".参数 message, 文本型",
+                "GlobalCount = GlobalCount + lineCount",
+                ".如果真 (FEATURE_ENABLED)",
+                ".如果真结束",
+            ],
+        )
+
     print(f"Loaded {dll_path.name}")
     print(f"Version: {version}")
     print("Restore failure path and error propagation verified")
-    print("Minimal restore/generate round trip verified")
+    print("Full restore/generate round trip fixture verified")
     return 0
 
 

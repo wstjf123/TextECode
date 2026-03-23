@@ -1,0 +1,10 @@
+.程序集 Helper, , 公开
+
+.子程序 LogMessage, , 公开
+.参数 message, 文本型
+.局部变量 lineCount, 整数型
+
+lineCount = 1
+.如果真 (FEATURE_ENABLED)
+    GlobalCount = GlobalCount + lineCount
+.如果真结束

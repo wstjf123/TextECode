@@ -1,8 +1,7 @@
 {
-  "Name": "NativeBridgeSmoke",
+  "Name": "NativeBridgeFixture",
   "Version": "1.0.0.0",
   "ProjectType": "WindowsConsole",
-  "Language": "GBK",
   "SourceSet": "src",
   "Dependencies": []
 }
