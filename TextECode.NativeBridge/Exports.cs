@@ -3,7 +3,6 @@ using OpenEpl.TextECode;
 using QIQI.EProjectFile;
 using System;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -11,14 +10,11 @@ namespace OpenEpl.TextECode.NativeBridge
 {
     public static unsafe class Exports
     {
+        private static readonly object initLock = new();
+        private static bool initialized;
+
         [ThreadStatic]
         private static string lastError;
-
-        [ModuleInitializer]
-        public static void Init()
-        {
-            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        }
 
         [UnmanagedCallersOnly(EntryPoint = "textecode_generate", CallConvs = new[] { typeof(CallConvCdecl) })]
         public static int Generate(nint inputEFile, nint outputProjectFile)
@@ -88,6 +84,7 @@ namespace OpenEpl.TextECode.NativeBridge
 
         private static int Run(Action action)
         {
+            EnsureInitialized();
             lastError = null;
             try
             {
@@ -98,6 +95,25 @@ namespace OpenEpl.TextECode.NativeBridge
             {
                 lastError = ex.ToString();
                 return -1;
+            }
+        }
+
+        private static void EnsureInitialized()
+        {
+            if (initialized)
+            {
+                return;
+            }
+
+            lock (initLock)
+            {
+                if (initialized)
+                {
+                    return;
+                }
+
+                Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+                initialized = true;
             }
         }
 

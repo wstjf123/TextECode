@@ -2,11 +2,11 @@
   <assembly fullname="OpenEpl.TextECode">
     <type fullname="OpenEpl.TextECode.Internal.JsonVersionConverter" preserve="all" />
     <type fullname="OpenEpl.TextECode.Model.DependencyModel" preserve="all" />
-    <type fullname="OpenEpl.TextECode.Model.DependencyModel+ECom" preserve="all" />
-    <type fullname="OpenEpl.TextECode.Model.DependencyModel+ELib" preserve="all" />
+    <type fullname="OpenEpl.TextECode.Model.DependencyModel/ECom" preserve="all" />
+    <type fullname="OpenEpl.TextECode.Model.DependencyModel/ELib" preserve="all" />
     <type fullname="OpenEpl.TextECode.Model.OrderItem" preserve="all" />
-    <type fullname="OpenEpl.TextECode.Model.OrderItem+Elem" preserve="all" />
-    <type fullname="OpenEpl.TextECode.Model.OrderItem+Folder" preserve="all" />
+    <type fullname="OpenEpl.TextECode.Model.OrderItem/Elem" preserve="all" />
+    <type fullname="OpenEpl.TextECode.Model.OrderItem/Folder" preserve="all" />
     <type fullname="OpenEpl.TextECode.Model.OrderModel" preserve="all" />
     <type fullname="OpenEpl.TextECode.Model.ProjectModel" preserve="all" />
   </assembly>
