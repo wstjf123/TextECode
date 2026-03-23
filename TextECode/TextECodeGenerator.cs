@@ -322,6 +322,10 @@ namespace OpenEpl.TextECode
                 }
             }
             var srcBase = new DirectoryInfo(SrcBasePath);
+            if (!srcBase.Exists)
+            {
+                return this;
+            }
             var NonGeneratedECodes = srcBase.GetFiles("*.ecode", SearchOption.AllDirectories)
                 .Where(x => !GeneratedPaths.Contains(x.FullName));
             var NonGeneratedEForms = srcBase.GetFiles("*.eform", SearchOption.AllDirectories)

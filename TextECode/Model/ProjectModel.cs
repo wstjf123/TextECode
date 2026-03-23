@@ -29,10 +29,10 @@ namespace OpenEpl.TextECode.Model
         [JsonConverter(typeof(JsonVersionConverter))]
         public Version Version { get; set; }
 
-        [JsonConverter(typeof(JsonStringEnumConverter))]
+        [JsonConverter(typeof(JsonStringEnumConverter<EplProjectType>))]
         public EplProjectType ProjectType { get; set; }
 
-        [JsonConverter(typeof(JsonStringEnumConverter))]
+        [JsonConverter(typeof(JsonStringEnumConverter<EplLanguage>))]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public EplLanguage? Language { get; set; }
 
