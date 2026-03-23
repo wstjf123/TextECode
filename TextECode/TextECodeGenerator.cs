@@ -100,7 +100,7 @@ namespace OpenEpl.TextECode
                 try
                 {
                     using var stream = File.Open(ProjectFilePath, FileMode.Open);
-                    var projectModel = JsonSerializer.Deserialize<ProjectModel>(stream);
+                    var projectModel = JsonSerializer.Deserialize(stream, TextECodeJsonContext.Default.ProjectModel);
                     this.SrcBasePath = Path.GetFullPath(projectModel.SourceSet, WorkingDir);
                     if (!string.IsNullOrEmpty(projectModel.OutFile))
                     {
@@ -289,7 +289,7 @@ namespace OpenEpl.TextECode
                 Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
                 Indented = true 
             });
-            JsonSerializer.Serialize(writer, projectModel);
+            JsonSerializer.Serialize(writer, projectModel, TextECodeJsonContext.Default.ProjectModel);
         }
 
         private void WriteOrderFile()
@@ -300,7 +300,7 @@ namespace OpenEpl.TextECode
                 Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
                 Indented = true 
             });
-            JsonSerializer.Serialize(writer, OrderModel);
+            JsonSerializer.Serialize(writer, OrderModel, TextECodeJsonContext.Default.OrderModel);
         }
 
         private bool HasIcon()

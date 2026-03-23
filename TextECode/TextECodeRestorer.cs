@@ -141,7 +141,7 @@ namespace OpenEpl.TextECode
             ProjectModel projectModel;
             using (var stream = File.OpenRead(ProjectFilePath))
             {
-                projectModel = JsonSerializer.Deserialize<ProjectModel>(stream);
+                projectModel = JsonSerializer.Deserialize(stream, TextECodeJsonContext.Default.ProjectModel);
             }
             OrderModel orderModel = null;
             if (File.Exists(OrderFilePath))
@@ -149,7 +149,7 @@ namespace OpenEpl.TextECode
                 try
                 {
                     using var stream = File.OpenRead(OrderFilePath);
-                    orderModel = JsonSerializer.Deserialize<OrderModel>(stream);
+                    orderModel = JsonSerializer.Deserialize(stream, TextECodeJsonContext.Default.OrderModel);
                 }
                 catch (Exception e)
                 {
