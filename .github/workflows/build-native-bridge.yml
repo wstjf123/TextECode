@@ -9,6 +9,7 @@ on:
       - '.github/workflows/build-native-bridge.yml'
       - 'TextECode/**'
       - 'TextECode.NativeBridge/**'
+      - 'tests/**'
 
 jobs:
   build:
@@ -29,12 +30,21 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Publish Native DLL
         run: >-
           dotnet publish TextECode.NativeBridge/TextECode.NativeBridge.csproj
           -c Release
           -r win-x64
           -o artifacts/win-x64
+
+      - name: Run Python smoke test
+        run: >-
+          python tests/python_smoke_test.py artifacts/win-x64/TextECode.NativeBridge.dll
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
