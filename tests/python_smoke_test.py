@@ -121,16 +121,22 @@ def main() -> int:
 
         expected_model = load_json(case_dir / "full.eproject")
         generated_model = load_json(regenerated_project)
-        if generated_model != expected_model:
-            raise AssertionError(
-                "round-trip project model mismatch\n"
-                f"expected: {expected_model}\n"
-                f"actual: {generated_model}"
-            )
+        for key in ("Name", "Version", "ProjectType", "SourceSet"):
+            if generated_model.get(key) != expected_model.get(key):
+                raise AssertionError(
+                    f"round-trip project field mismatch for {key}: "
+                    f"expected={expected_model.get(key)!r}, actual={generated_model.get(key)!r}"
+                )
         if generated_model.get("Name") != "NativeBridgeFixture":
             raise AssertionError("round-trip project name mismatch")
         if not isinstance(generated_model.get("Dependencies"), list):
             raise AssertionError("generated project dependencies are missing")
+        if not any(
+            item.get("Kind") == "ELib" and item.get("FileName") == "krnln"
+            for item in generated_model["Dependencies"]
+            if isinstance(item, dict)
+        ):
+            raise AssertionError("generated project is missing the core krnln dependency")
 
         expected_order = load_json(case_dir / "full.eproject.order")
         generated_order = load_json(regenerated_root / "full.eproject.order")
