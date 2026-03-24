@@ -151,7 +151,8 @@ def main():
             if expects_forms:
                 assert_snapshot_files(generated_root, original_root)
 
-            print(f"[ok] {relative_project}")
+            safe_name = relative_project.encode("unicode_escape").decode("ascii")
+            print(f"[ok] {safe_name}")
 
     print(f"Real-world conversion samples verified with DLL version {version}")
 
