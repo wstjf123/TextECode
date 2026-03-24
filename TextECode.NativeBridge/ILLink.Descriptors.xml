@@ -13,7 +13,7 @@
     <type fullname="OpenEpl.TextECode.Model.FormControlEventBindingModel" preserve="all" />
     <type fullname="OpenEpl.TextECode.Model.ProjectModel" preserve="all" />
   </assembly>
-  <assembly fullname="QIQI.EProjectFile">
+  <assembly fullname="EProjectFile">
     <type fullname="QIQI.EProjectFile.FormInfo" preserve="all" />
     <type fullname="QIQI.EProjectFile.FormElementInfo" preserve="all" />
     <type fullname="QIQI.EProjectFile.FormElementInfo/FormElementInfoJsonConverter" preserve="all" />
