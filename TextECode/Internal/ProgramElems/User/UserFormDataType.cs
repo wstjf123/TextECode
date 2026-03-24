@@ -1,4 +1,5 @@
-﻿using OpenEpl.ELibInfo;
+﻿using Microsoft.Extensions.Logging;
+using OpenEpl.ELibInfo;
 using OpenEpl.TextECode.Internal.ProgramElems;
 using OpenEpl.TextECode.Internal.ProgramElems.External;
 using OpenEpl.TextECode.Utils.Scopes;
@@ -39,15 +40,25 @@ namespace OpenEpl.TextECode.Internal.ProgramElems.User
                     }
                 }
             }
-            var krnlnLib = P.ELibs[0];
-            var formLibType = krnlnLib.DataTypes[0];
-            for (int memberId = 0; memberId < formLibType.Members.Length; memberId++)
+            var formLibType = P.ELibs.ElementAtOrDefault(0)?.DataTypes.ElementAtOrDefault(0);
+            if (formLibType?.Members != null)
             {
-                var member = formLibType.Members[memberId];
-                var memberElem = new ExternalMemberElem(P, formInfo.Id, memberId + 1 /* 必须要+1 */, member.Name, P.FindTypeByLibAngle(0, member.DataType), formSelfControl.Id);
-                scope.Add(ProgramElemName.Var(member.Name), memberElem);
+                for (int memberId = 0; memberId < formLibType.Members.Length; memberId++)
+                {
+                    var member = formLibType.Members[memberId];
+                    var memberElem = new ExternalMemberElem(P, formInfo.Id, memberId + 1 /* 必须要+1 */, member.Name, P.FindTypeByLibAngle(0, member.DataType), formSelfControl.Id);
+                    scope.Add(ProgramElemName.Var(member.Name), memberElem);
+                }
             }
-            ScopeForForm = new InheritedScope<ProgramElemName, ProgramElem>(scope, P.LibDataTypes[0][0].ScopeFromOuter);
+            else
+            {
+                P.logger.LogWarning("无法获取系统窗口数据类型成员信息，窗口 {FormName} 的内建成员作用域将不完整", formInfo.Name);
+            }
+
+            var baseScope = P.LibDataTypes.ElementAtOrDefault(0)?.ElementAtOrDefault(0)?.ScopeFromOuter;
+            ScopeForForm = baseScope != null
+                ? new InheritedScope<ProgramElemName, ProgramElem>(scope, baseScope)
+                : scope;
             _scopeFromOuter = ScopeForForm;
             if (!string.IsNullOrEmpty(formInfo.Name))
             {
