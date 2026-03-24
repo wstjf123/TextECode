@@ -7,8 +7,8 @@ import tempfile
 
 SAMPLES = [
     ("QSJson/QSJson.eproject", False),
-    ("@Demo/JsonView/JsonView.eproject", True),
-    ("QSSmartScale/QSSmartScale.eproject", True),
+    ("QS数值/QS数值.eproject", False),
+    ("QS随机数/QS随机数.eproject", False),
 ]
 
 
