@@ -52,7 +52,7 @@ namespace OpenEpl.TextECode.Internal
                 Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
                 Indented = true
             });
-            JsonSerializer.Serialize(writer, snapshot, TextECodeJsonContext.Default.FormSnapshotModel);
+            JsonSerializer.Serialize(writer, snapshot);
         }
 
         private FormSnapshotModel Build()
@@ -170,7 +170,7 @@ namespace OpenEpl.TextECode.Internal
             snapshot.LibraryGuid = library.GuidString;
             snapshot.LibraryName = library.Name;
             snapshot.LibraryFileName = library.FileName;
-            snapshot.LibraryVersion = library.Version;
+            snapshot.LibraryVersion = library.Version?.ToString();
             snapshot.DataTypeIndex = type;
             snapshot.DataTypeName = eLibs.ElementAtOrDefault(lib)?.DataTypes.ElementAtOrDefault(type)?.Name;
         }

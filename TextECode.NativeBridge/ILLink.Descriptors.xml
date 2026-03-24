@@ -8,6 +8,17 @@
     <type fullname="OpenEpl.TextECode.Model.OrderItem/Elem" preserve="all" />
     <type fullname="OpenEpl.TextECode.Model.OrderItem/Folder" preserve="all" />
     <type fullname="OpenEpl.TextECode.Model.OrderModel" preserve="all" />
+    <type fullname="OpenEpl.TextECode.Model.FormSnapshotModel" preserve="all" />
+    <type fullname="OpenEpl.TextECode.Model.FormElementSnapshotModel" preserve="all" />
+    <type fullname="OpenEpl.TextECode.Model.FormControlEventBindingModel" preserve="all" />
     <type fullname="OpenEpl.TextECode.Model.ProjectModel" preserve="all" />
+  </assembly>
+  <assembly fullname="QIQI.EProjectFile">
+    <type fullname="QIQI.EProjectFile.FormInfo" preserve="all" />
+    <type fullname="QIQI.EProjectFile.FormElementInfo" preserve="all" />
+    <type fullname="QIQI.EProjectFile.FormElementInfo/FormElementInfoJsonConverter" preserve="all" />
+    <type fullname="QIQI.EProjectFile.FormControlInfo" preserve="all" />
+    <type fullname="QIQI.EProjectFile.FormMenuInfo" preserve="all" />
+    <type fullname="QIQI.EProjectFile.Internal.ByteArrayHexConverter" preserve="all" />
   </assembly>
 </linker>

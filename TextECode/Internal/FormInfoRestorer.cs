@@ -34,7 +34,7 @@ namespace OpenEpl.TextECode.Internal
 
         public void LoadSnapshot(Stream stream)
         {
-            snapshotModel = JsonSerializer.Deserialize(stream, TextECodeJsonContext.Default.FormSnapshotModel)
+            snapshotModel = JsonSerializer.Deserialize<FormSnapshotModel>(stream)
                 ?? throw new Exception("读取窗口快照失败");
         }
 

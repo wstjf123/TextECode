@@ -1,5 +1,4 @@
 using QIQI.EProjectFile;
-using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
@@ -35,8 +34,7 @@ namespace OpenEpl.TextECode.Model
         public string LibraryFileName { get; set; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        [JsonConverter(typeof(JsonVersionConverter))]
-        public Version LibraryVersion { get; set; }
+        public string LibraryVersion { get; set; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public int? DataTypeIndex { get; set; }
