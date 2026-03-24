@@ -9,6 +9,7 @@ on:
       - '.github/workflows/build-native-bridge.yml'
       - 'TextECode/**'
       - 'TextECode.NativeBridge/**'
+      - 'tests/**'
 
 jobs:
   build:
@@ -29,12 +30,36 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Publish Native DLL
         run: >-
           dotnet publish TextECode.NativeBridge/TextECode.NativeBridge.csproj
           -c Release
           -r win-x64
           -o artifacts/win-x64
+
+      - name: Download real-world QSEC samples
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $sha = 'ff445968cab4e80dd80b0eed7f8cdce5c10967c6'
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          gh api repos/OpenEpl/QSEC/zipball/$sha --output artifacts/qsec.zip
+          Expand-Archive -Path artifacts/qsec.zip -DestinationPath artifacts/qsec-src -Force
+          $root = Get-ChildItem artifacts/qsec-src | Select-Object -First 1
+          if (-not $root) {
+            throw 'Failed to extract the QSEC fixture repository.'
+          }
+          "QSEC_ROOT=$($root.FullName)" >> $env:GITHUB_ENV
+
+      - name: Run real-world conversion test
+        run: >-
+          python tests/python_real_world_test.py artifacts/win-x64/TextECode.NativeBridge.dll "$env:QSEC_ROOT"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
