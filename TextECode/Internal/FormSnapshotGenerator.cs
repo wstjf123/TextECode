@@ -52,7 +52,7 @@ namespace OpenEpl.TextECode.Internal
                 Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
                 Indented = true
             });
-            JsonSerializer.Serialize(writer, snapshot);
+            JsonSerializer.Serialize(writer, snapshot, TextECodeJsonContext.Default.FormSnapshotModel);
         }
 
         private FormSnapshotModel Build()
@@ -60,8 +60,9 @@ namespace OpenEpl.TextECode.Internal
             var snapshot = new FormSnapshotModel()
             {
                 Name = formInfo.Name,
+                Comment = formInfo.Comment,
+                UnknownBeforeClass = formInfo.UnknownBeforeClass,
                 AssociatedClassName = GetAssociatedClassName(),
-                Form = formInfo,
             };
 
             var methodsById = GetAssociatedMethodsById();
@@ -69,8 +70,12 @@ namespace OpenEpl.TextECode.Internal
             {
                 var elementSnapshot = new FormElementSnapshotModel()
                 {
+                    Kind = element is FormMenuInfo ? "Menu" : "Control",
                     ElementId = element.Id,
                     DataType = element.DataType,
+                    Name = element.Name,
+                    Visible = element.Visible,
+                    Disable = element.Disable,
                 };
 
                 switch (element)
@@ -113,6 +118,23 @@ namespace OpenEpl.TextECode.Internal
 
         private void PopulateControlSnapshot(FormElementSnapshotModel snapshot, FormControlInfo control, IReadOnlyDictionary<int, string> methodsById)
         {
+            snapshot.IsFormSelf = EplSystemId.GetType(control.Id) == EplSystemId.Type_FormSelf;
+            snapshot.Comment = control.Comment;
+            snapshot.CWndAddress = control.CWndAddress;
+            snapshot.Left = control.Left;
+            snapshot.Top = control.Top;
+            snapshot.Width = control.Width;
+            snapshot.Height = control.Height;
+            snapshot.UnknownBeforeParent = control.UnknownBeforeParent;
+            snapshot.Parent = control.Parent;
+            snapshot.Children = control.Children?.ToArray() ?? System.Array.Empty<int>();
+            snapshot.CursorBase64 = Convert.ToBase64String(control.Cursor ?? System.Array.Empty<byte>());
+            snapshot.Tag = control.Tag;
+            snapshot.UnknownBeforeVisible = control.UnknownBeforeVisible;
+            snapshot.TabStop = control.TabStop;
+            snapshot.Locked = control.Locked;
+            snapshot.TabIndex = control.TabIndex;
+            snapshot.ExtensionDataBase64 = Convert.ToBase64String(control.ExtensionData ?? System.Array.Empty<byte>());
             PopulateDataTypeIdentity(snapshot, control.DataType);
 
             if (!control.UnknownBeforeName.IsDefaultOrEmpty)
@@ -144,6 +166,10 @@ namespace OpenEpl.TextECode.Internal
 
         private void PopulateMenuSnapshot(FormElementSnapshotModel snapshot, FormMenuInfo menu, IReadOnlyDictionary<int, string> methodsById)
         {
+            snapshot.HotKey = menu.HotKey;
+            snapshot.Level = menu.Level;
+            snapshot.Selected = menu.Selected;
+            snapshot.Text = menu.Text;
             if (!menu.UnknownBeforeName.IsDefaultOrEmpty)
             {
                 snapshot.UnknownBeforeNameBase64 = Convert.ToBase64String(menu.UnknownBeforeName.ToArray());

@@ -35,7 +35,7 @@ namespace OpenEpl.TextECode.Internal
 
         public void LoadSnapshot(Stream stream)
         {
-            snapshotModel = JsonSerializer.Deserialize<FormSnapshotModel>(stream)
+            snapshotModel = JsonSerializer.Deserialize(stream, TextECodeJsonContext.Default.FormSnapshotModel)
                 ?? throw new Exception("读取窗口快照失败");
         }
 
@@ -79,83 +79,83 @@ namespace OpenEpl.TextECode.Internal
 
         private UserFormDataType RestoreFromSnapshot()
         {
-            if (snapshotModel.Form == null)
+            if (snapshotModel.Elements == null)
             {
-                throw new Exception("窗口快照缺少 Form 数据");
+                throw new Exception("窗口快照缺少 Elements 数据");
             }
 
-            var sourceForm = snapshotModel.Form;
             var metadataById = snapshotModel.Elements?.ToDictionary(x => x.ElementId) ?? new Dictionary<int, FormElementSnapshotModel>();
             var idMap = new Dictionary<int, int>();
 
             formInfo = new FormInfo(P.AllocId(EplSystemId.Type_Form))
             {
-                Name = sourceForm.Name,
-                Comment = sourceForm.Comment,
-                UnknownBeforeClass = sourceForm.UnknownBeforeClass,
+                Name = snapshotModel.Name,
+                Comment = snapshotModel.Comment,
+                UnknownBeforeClass = snapshotModel.UnknownBeforeClass,
                 Class = 0,
                 Elements = new()
             };
 
-            foreach (var element in sourceForm.Elements)
+            foreach (var element in snapshotModel.Elements)
             {
-                metadataById.TryGetValue(element.Id, out var metadata);
-                switch (element)
+                switch (element.Kind)
                 {
-                    case FormMenuInfo menu:
+                    case "Menu":
                     {
                         var restoredMenu = new FormMenuInfo(P.AllocId(EplSystemId.Type_FormMenu))
                         {
-                            DataType = menu.DataType,
-                            Name = menu.Name,
-                            Visible = menu.Visible,
-                            Disable = menu.Disable,
-                            HotKey = menu.HotKey,
-                            Level = menu.Level,
-                            Selected = menu.Selected,
-                            Text = menu.Text,
+                            DataType = element.DataType,
+                            Name = element.Name,
+                            Visible = element.Visible,
+                            Disable = element.Disable,
+                            HotKey = element.HotKey,
+                            Level = element.Level,
+                            Selected = element.Selected,
+                            Text = element.Text,
                             ClickEvent = 0,
                         };
-                        ApplyExtraSnapshotData(restoredMenu, metadata);
-                        idMap[element.Id] = restoredMenu.Id;
+                        ApplyExtraSnapshotData(restoredMenu, element);
+                        idMap[element.ElementId] = restoredMenu.Id;
                         formInfo.Elements.Add(restoredMenu);
                         break;
                     }
-                    case FormControlInfo control:
+                    case "Control":
                     {
-                        var restoredControl = new FormControlInfo(P.AllocId(EplSystemId.GetType(control.Id) == EplSystemId.Type_FormSelf
+                        var restoredControl = new FormControlInfo(P.AllocId(element.IsFormSelf
                             ? EplSystemId.Type_FormSelf
                             : EplSystemId.Type_FormControl))
                         {
-                            DataType = ResolveControlDataType(control, metadata),
-                            Name = control.Name,
-                            Visible = control.Visible,
-                            Disable = control.Disable,
-                            Comment = control.Comment,
-                            CWndAddress = control.CWndAddress,
-                            Left = control.Left,
-                            Top = control.Top,
-                            Width = control.Width,
-                            Height = control.Height,
-                            UnknownBeforeParent = control.UnknownBeforeParent,
-                            Cursor = control.Cursor?.ToArray() ?? Array.Empty<byte>(),
-                            Tag = control.Tag,
-                            UnknownBeforeVisible = control.UnknownBeforeVisible,
-                            TabStop = control.TabStop,
-                            Locked = control.Locked,
-                            TabIndex = control.TabIndex,
+                            DataType = ResolveControlDataType(element),
+                            Name = element.Name,
+                            Visible = element.Visible,
+                            Disable = element.Disable,
+                            Comment = element.Comment,
+                            CWndAddress = element.CWndAddress,
+                            Left = element.Left,
+                            Top = element.Top,
+                            Width = element.Width,
+                            Height = element.Height,
+                            UnknownBeforeParent = element.UnknownBeforeParent,
+                            Cursor = DecodeBase64(element.CursorBase64),
+                            Tag = element.Tag,
+                            UnknownBeforeVisible = element.UnknownBeforeVisible,
+                            TabStop = element.TabStop,
+                            Locked = element.Locked,
+                            TabIndex = element.TabIndex,
                             Events = Array.Empty<KeyValuePair<int, int>>(),
-                            ExtensionData = control.ExtensionData?.ToArray() ?? Array.Empty<byte>(),
+                            ExtensionData = DecodeBase64(element.ExtensionDataBase64),
                         };
-                        ApplyExtraSnapshotData(restoredControl, metadata);
-                        idMap[element.Id] = restoredControl.Id;
+                        ApplyExtraSnapshotData(restoredControl, element);
+                        idMap[element.ElementId] = restoredControl.Id;
                         formInfo.Elements.Add(restoredControl);
                         break;
                     }
+                    default:
+                        throw new Exception($"窗口快照包含未知元素类型: {element.Kind}");
                 }
             }
 
-            foreach (var pair in sourceForm.Elements.OfType<FormControlInfo>().Zip(formInfo.Elements.OfType<FormControlInfo>(), (source, restored) => (source, restored)))
+            foreach (var pair in snapshotModel.Elements.Where(x => x.Kind == "Control").Zip(formInfo.Elements.OfType<FormControlInfo>(), (source, restored) => (source, restored)))
             {
                 pair.restored.Parent = pair.source.Parent != 0 && idMap.TryGetValue(pair.source.Parent, out var parentId)
                     ? parentId
@@ -326,18 +326,18 @@ namespace OpenEpl.TextECode.Internal
             _ => false,
         };
 
-        private int ResolveControlDataType(FormControlInfo control, FormElementSnapshotModel metadata)
+        private int ResolveControlDataType(FormElementSnapshotModel metadata)
         {
             if (metadata?.DataTypeIndex == null)
             {
-                return control.DataType;
+                return metadata?.DataType ?? 0;
             }
 
             var libIndex = ResolveLibraryIndex(metadata);
             if (libIndex == -1)
             {
-                P.logger.LogWarning("无法解析窗口控件 {ControlName} 的支持库信息，回退使用原始数据类型值 {DataType}", control.Name, control.DataType);
-                return control.DataType;
+                P.logger.LogWarning("无法解析窗口控件 {ControlName} 的支持库信息，回退使用原始数据类型值 {DataType}", metadata.Name, metadata.DataType);
+                return metadata.DataType;
             }
 
             return EplSystemId.MakeLibDataTypeId(checked((short)libIndex), checked((short)metadata.DataTypeIndex.Value));
@@ -388,6 +388,11 @@ namespace OpenEpl.TextECode.Internal
             {
                 control.UnknownBeforeExtensionData = ImmutableArray.Create(Convert.FromBase64String(metadata.UnknownBeforeExtensionDataBase64));
             }
+        }
+
+        private static byte[] DecodeBase64(string value)
+        {
+            return string.IsNullOrEmpty(value) ? Array.Empty<byte>() : Convert.FromBase64String(value);
         }
 
         private void ApplyExtraSnapshotData(FormMenuInfo menu, FormElementSnapshotModel metadata)

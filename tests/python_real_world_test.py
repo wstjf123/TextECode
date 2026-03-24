@@ -90,10 +90,10 @@ def assert_snapshot_files(generated_root, original_root):
         raise AssertionError(f"snapshot file mismatch\nexpected={expected}\nactual={snapshot_files}")
     for rel_path in snapshot_files:
         snapshot = load_json(generated_root / rel_path)
-        if not snapshot.get("Form"):
-            raise AssertionError(f"snapshot {rel_path} is missing Form payload")
         if not snapshot.get("Elements"):
             raise AssertionError(f"snapshot {rel_path} is missing element metadata")
+        if snapshot.get("FormatVersion") != 2:
+            raise AssertionError(f"snapshot {rel_path} has unexpected format version: {snapshot.get('FormatVersion')}")
 
 
 def main():

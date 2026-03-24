@@ -57,9 +57,19 @@ jobs:
           }
           "QSEC_ROOT=$($root.FullName)" >> $env:GITHUB_ENV
 
+      - name: Download real form .e sample
+        shell: pwsh
+        run: |
+          $url = 'https://gitee.com/kyozy/esqlite31/raw/master/esqlite31/%E4%BE%8B%E7%A8%8B%28%E6%94%AF%E6%8C%81%E5%BA%93%E7%89%88%29.e'
+          Invoke-WebRequest -Uri $url -OutFile artifacts/real-form-sample.e
+
       - name: Run real-world conversion test
         run: >-
           python tests/python_real_world_test.py artifacts/win-x64/TextECode.NativeBridge.dll "$env:QSEC_ROOT"
+
+      - name: Run real form sample test
+        run: >-
+          python tests/python_form_generate_test.py artifacts/win-x64/TextECode.NativeBridge.dll artifacts/real-form-sample.e
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
