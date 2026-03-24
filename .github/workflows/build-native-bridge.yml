@@ -49,7 +49,7 @@ jobs:
         run: |
           $sha = 'ff445968cab4e80dd80b0eed7f8cdce5c10967c6'
           New-Item -ItemType Directory -Force artifacts | Out-Null
-          gh api repos/OpenEpl/QSEC/zipball/$sha --output artifacts/qsec.zip
+          Invoke-WebRequest -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json' } -Uri "https://api.github.com/repos/OpenEpl/QSEC/zipball/$sha" -OutFile artifacts/qsec.zip
           Expand-Archive -Path artifacts/qsec.zip -DestinationPath artifacts/qsec-src -Force
           $root = Get-ChildItem artifacts/qsec-src | Select-Object -First 1
           if (-not $root) {
