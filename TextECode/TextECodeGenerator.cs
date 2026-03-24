@@ -330,10 +330,12 @@ namespace OpenEpl.TextECode
                 .Where(x => !GeneratedPaths.Contains(x.FullName));
             var NonGeneratedEForms = srcBase.GetFiles("*.eform", SearchOption.AllDirectories)
                 .Where(x => !GeneratedPaths.Contains(x.FullName));
+            var NonGeneratedEFormSnapshots = srcBase.GetFiles("*.eform.json", SearchOption.AllDirectories)
+                .Where(x => !GeneratedPaths.Contains(x.FullName));
             var NonGeneratedResources = srcBase.GetDirectories("@Resource", SearchOption.AllDirectories)
                 .SelectMany(x => x.EnumerateFiles())
                 .Where(x => !GeneratedPaths.Contains(x.FullName));
-            foreach (var item in NonGeneratedECodes.Concat(NonGeneratedEForms).Concat(NonGeneratedResources))
+            foreach (var item in NonGeneratedECodes.Concat(NonGeneratedEForms).Concat(NonGeneratedEFormSnapshots).Concat(NonGeneratedResources))
             {
                 try
                 {
@@ -470,6 +472,15 @@ namespace OpenEpl.TextECode
             }
             using var stream = CreateEFormFile(folderInfo, elem.Name);
             new FormInfoGenerator(elem, Code.Libraries, IdToNameMap, LoggerFactory).Save(stream);
+            using var snapshotStream = CreateEFormSnapshotFile(folderInfo, elem.Name);
+            new FormSnapshotGenerator(
+                elem,
+                ClassIdMap,
+                MethodIdMap,
+                Code.Libraries,
+                IdToNameMap.LibDefinedName,
+                IdToNameMap,
+                LoggerFactory).Save(snapshotStream);
         }
 
         private void HandleClass(CodeFolderInfo folderInfo, ClassInfo elem)
@@ -604,6 +615,13 @@ namespace OpenEpl.TextECode
         private Stream CreateEFormFile(CodeFolderInfo folderInfo, string name)
         {
             var path = Path.Combine(PrepareFolder(folderInfo).FullName, $"{name}.eform");
+            GeneratedPaths.Add(path);
+            return File.Open(path, FileMode.Create);
+        }
+
+        private Stream CreateEFormSnapshotFile(CodeFolderInfo folderInfo, string name)
+        {
+            var path = Path.Combine(PrepareFolder(folderInfo).FullName, $"{name}.eform.json");
             GeneratedPaths.Add(path);
             return File.Open(path, FileMode.Create);
         }

@@ -2,11 +2,15 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using System.Xml;
 using System.Linq;
 using QIQI.EProjectFile;
 using OpenEpl.TextECode.Internal.ProgramElems.User;
 using OpenEpl.TextECode.Internal.ProgramElems;
+using OpenEpl.TextECode.Model;
+using OpenEpl.ELibInfo.Loader;
+using System.Collections.Immutable;
 
 namespace OpenEpl.TextECode.Internal
 {
@@ -15,6 +19,9 @@ namespace OpenEpl.TextECode.Internal
         private readonly TextECodeRestorer P;
         private readonly XmlDocument doc = new();
         private FormInfo formInfo;
+        private FormSnapshotModel snapshotModel;
+
+        public bool HasSnapshot => snapshotModel != null;
 
         public FormInfoRestorer(TextECodeRestorer p)
         {
@@ -24,8 +31,20 @@ namespace OpenEpl.TextECode.Internal
         {
             doc.Load(stream);
         }
+
+        public void LoadSnapshot(Stream stream)
+        {
+            snapshotModel = JsonSerializer.Deserialize(stream, TextECodeJsonContext.Default.FormSnapshotModel)
+                ?? throw new Exception("读取窗口快照失败");
+        }
+
         public UserFormDataType Restore()
         {
+            if (snapshotModel != null)
+            {
+                return RestoreFromSnapshot();
+            }
+
             var formXmlElem = doc.DocumentElement;
             formInfo = new FormInfo(P.AllocId(EplSystemId.Type_Form))
             {
@@ -54,6 +73,99 @@ namespace OpenEpl.TextECode.Internal
 
             var result = new UserFormDataType(P, formInfo);
             P.Forms.Add(result);
+            return result;
+        }
+
+        private UserFormDataType RestoreFromSnapshot()
+        {
+            if (snapshotModel.Form == null)
+            {
+                throw new Exception("窗口快照缺少 Form 数据");
+            }
+
+            var sourceForm = snapshotModel.Form;
+            var metadataById = snapshotModel.Elements?.ToDictionary(x => x.ElementId) ?? new Dictionary<int, FormElementSnapshotModel>();
+            var idMap = new Dictionary<int, int>();
+
+            formInfo = new FormInfo(P.AllocId(EplSystemId.Type_Form))
+            {
+                Name = sourceForm.Name,
+                Comment = sourceForm.Comment,
+                UnknownBeforeClass = sourceForm.UnknownBeforeClass,
+                Class = 0,
+                Elements = new()
+            };
+
+            foreach (var element in sourceForm.Elements)
+            {
+                metadataById.TryGetValue(element.Id, out var metadata);
+                switch (element)
+                {
+                    case FormMenuInfo menu:
+                    {
+                        var restoredMenu = new FormMenuInfo(P.AllocId(EplSystemId.Type_FormMenu))
+                        {
+                            DataType = menu.DataType,
+                            Name = menu.Name,
+                            Visible = menu.Visible,
+                            Disable = menu.Disable,
+                            HotKey = menu.HotKey,
+                            Level = menu.Level,
+                            Selected = menu.Selected,
+                            Text = menu.Text,
+                            ClickEvent = 0,
+                        };
+                        ApplyExtraSnapshotData(restoredMenu, metadata);
+                        idMap[element.Id] = restoredMenu.Id;
+                        formInfo.Elements.Add(restoredMenu);
+                        break;
+                    }
+                    case FormControlInfo control:
+                    {
+                        var restoredControl = new FormControlInfo(P.AllocId(EplSystemId.GetType(control.Id) == EplSystemId.Type_FormSelf
+                            ? EplSystemId.Type_FormSelf
+                            : EplSystemId.Type_FormControl))
+                        {
+                            DataType = ResolveControlDataType(control, metadata),
+                            Name = control.Name,
+                            Visible = control.Visible,
+                            Disable = control.Disable,
+                            Comment = control.Comment,
+                            CWndAddress = control.CWndAddress,
+                            Left = control.Left,
+                            Top = control.Top,
+                            Width = control.Width,
+                            Height = control.Height,
+                            UnknownBeforeParent = control.UnknownBeforeParent,
+                            Cursor = control.Cursor?.ToArray() ?? Array.Empty<byte>(),
+                            Tag = control.Tag,
+                            UnknownBeforeVisible = control.UnknownBeforeVisible,
+                            TabStop = control.TabStop,
+                            Locked = control.Locked,
+                            TabIndex = control.TabIndex,
+                            Events = Array.Empty<KeyValuePair<int, int>>(),
+                            ExtensionData = control.ExtensionData?.ToArray() ?? Array.Empty<byte>(),
+                        };
+                        ApplyExtraSnapshotData(restoredControl, metadata);
+                        idMap[element.Id] = restoredControl.Id;
+                        formInfo.Elements.Add(restoredControl);
+                        break;
+                    }
+                }
+            }
+
+            foreach (var pair in sourceForm.Elements.OfType<FormControlInfo>().Zip(formInfo.Elements.OfType<FormControlInfo>(), (source, restored) => (source, restored)))
+            {
+                pair.restored.Parent = pair.source.Parent != 0 && idMap.TryGetValue(pair.source.Parent, out var parentId)
+                    ? parentId
+                    : 0;
+                pair.restored.Children = pair.source.Children?.Select(x => x == 0 ? 0 : idMap.TryGetValue(x, out var childId) ? childId : 0).ToArray()
+                    ?? Array.Empty<int>();
+            }
+
+            var result = new UserFormDataType(P, formInfo);
+            P.Forms.Add(result);
+            RegisterSnapshotBindings(result, idMap, metadataById);
             return result;
         }
 
@@ -212,5 +324,129 @@ namespace OpenEpl.TextECode.Internal
             "on" => true,
             _ => false,
         };
+
+        private int ResolveControlDataType(FormControlInfo control, FormElementSnapshotModel metadata)
+        {
+            if (metadata?.DataTypeIndex == null)
+            {
+                return control.DataType;
+            }
+
+            var libIndex = ResolveLibraryIndex(metadata);
+            if (libIndex == -1)
+            {
+                P.logger.LogWarning("无法解析窗口控件 {ControlName} 的支持库信息，回退使用原始数据类型值 {DataType}", control.Name, control.DataType);
+                return control.DataType;
+            }
+
+            return EplSystemId.MakeLibDataTypeId(checked((short)libIndex), checked((short)metadata.DataTypeIndex.Value));
+        }
+
+        private int ResolveLibraryIndex(FormElementSnapshotModel metadata)
+        {
+            if (!string.IsNullOrEmpty(metadata.LibraryGuid))
+            {
+                try
+                {
+                    var guid = GuidUtils.ParseGuidLosely(metadata.LibraryGuid);
+                    if (P.ELibIndexMap.TryGetValue(guid, out var libIndex))
+                    {
+                        return libIndex;
+                    }
+                }
+                catch (Exception)
+                {
+                }
+            }
+
+            var exactIndex = P.libraryRefInfos.FindIndex(x =>
+                string.Equals(x.FileName, metadata.LibraryFileName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(x.Name, metadata.LibraryName, StringComparison.Ordinal)
+                && string.Equals(x.GuidString, metadata.LibraryGuid, StringComparison.OrdinalIgnoreCase));
+            if (exactIndex != -1)
+            {
+                return exactIndex;
+            }
+
+            var fileIndex = P.libraryRefInfos.FindIndex(x => string.Equals(x.FileName, metadata.LibraryFileName, StringComparison.OrdinalIgnoreCase));
+            if (fileIndex != -1)
+            {
+                return fileIndex;
+            }
+
+            return P.libraryRefInfos.FindIndex(x => string.Equals(x.Name, metadata.LibraryName, StringComparison.Ordinal));
+        }
+
+        private void ApplyExtraSnapshotData(FormControlInfo control, FormElementSnapshotModel metadata)
+        {
+            if (!string.IsNullOrEmpty(metadata?.UnknownBeforeNameBase64))
+            {
+                control.UnknownBeforeName = ImmutableArray.Create(Convert.FromBase64String(metadata.UnknownBeforeNameBase64));
+            }
+            if (!string.IsNullOrEmpty(metadata?.UnknownBeforeExtensionDataBase64))
+            {
+                control.UnknownBeforeExtensionData = ImmutableArray.Create(Convert.FromBase64String(metadata.UnknownBeforeExtensionDataBase64));
+            }
+        }
+
+        private void ApplyExtraSnapshotData(FormMenuInfo menu, FormElementSnapshotModel metadata)
+        {
+            if (!string.IsNullOrEmpty(metadata?.UnknownBeforeNameBase64))
+            {
+                menu.UnknownBeforeName = ImmutableArray.Create(Convert.FromBase64String(metadata.UnknownBeforeNameBase64));
+            }
+            if (!string.IsNullOrEmpty(metadata?.UnknownAfterClickEventBase64))
+            {
+                menu.UnknownAfterClickEvent = ImmutableArray.Create(Convert.FromBase64String(metadata.UnknownAfterClickEventBase64));
+            }
+        }
+
+        private void RegisterSnapshotBindings(UserFormDataType formDataType, IReadOnlyDictionary<int, int> idMap, IReadOnlyDictionary<int, FormElementSnapshotModel> metadataById)
+        {
+            if (string.IsNullOrEmpty(snapshotModel.AssociatedClassName)
+                && metadataById.Values.All(x => (x.Events?.Count ?? 0) == 0 && string.IsNullOrEmpty(x.ClickHandlerMethodName)))
+            {
+                return;
+            }
+
+            var pending = new PendingFormSnapshotInfo()
+            {
+                FormInfo = formInfo,
+                FormDataType = formDataType,
+                AssociatedClassName = snapshotModel.AssociatedClassName,
+            };
+
+            foreach (var metadata in metadataById.Values)
+            {
+                if (!idMap.TryGetValue(metadata.ElementId, out var newElementId))
+                {
+                    continue;
+                }
+                foreach (var item in metadata.Events ?? Enumerable.Empty<FormControlEventBindingModel>())
+                {
+                    if (string.IsNullOrEmpty(item.HandlerMethodName))
+                    {
+                        continue;
+                    }
+                    pending.ControlEventBindings.Add(new PendingFormControlEventBinding()
+                    {
+                        ElementId = newElementId,
+                        EventKey = item.EventKey,
+                        EventName = item.EventName,
+                        HandlerMethodName = item.HandlerMethodName,
+                    });
+                }
+                if (!string.IsNullOrEmpty(metadata.ClickHandlerMethodName))
+                {
+                    pending.MenuEventBindings.Add(new PendingFormMenuEventBinding()
+                    {
+                        ElementId = newElementId,
+                        HandlerMethodName = metadata.ClickHandlerMethodName,
+                    });
+                }
+            }
+
+            P.PendingFormSnapshots.Add(pending);
+        }
     }
 }

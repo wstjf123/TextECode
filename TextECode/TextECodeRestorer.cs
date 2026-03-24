@@ -66,6 +66,7 @@ namespace OpenEpl.TextECode
         internal List<UserFormDataType> Forms;
         internal Scope<string, UserFormDataType> FormTypeScope;
         internal List<UserLostDataType> LostDataTypes;
+        internal List<PendingFormSnapshotInfo> PendingFormSnapshots;
 
         internal IScope<ProgramElemName, ProgramElem> TopLevelScope;
         internal Scope<ProgramElemName, ProgramElem> SystemTopLevelScope;
@@ -107,6 +108,7 @@ namespace OpenEpl.TextECode
             Forms = new();
             FormTypeScope = new();
             LostDataTypes = new();
+            PendingFormSnapshots = new();
 
             Folder = new()
             {
@@ -353,6 +355,7 @@ namespace OpenEpl.TextECode
             {
                 item.AssociateBase();
             }
+            ApplyPendingFormSnapshotClassAssociations();
             var classGraph = new AdjacencyGraph<UserClassElem, IEdge<UserClassElem>>();
             foreach (var item in Classes)
             {
@@ -372,6 +375,7 @@ namespace OpenEpl.TextECode
             foreach (var item in Structs) item.DefineAll();
             foreach (var item in GlobalVariables) item.DefineAll();
             foreach (var item in DllDeclares) item.DefineAll();
+            ApplyPendingFormSnapshotEventBindings();
 
             // Stage: Finish
             foreach (var item in Constants) item.Finish();
@@ -648,11 +652,37 @@ namespace OpenEpl.TextECode
             foreach (var item in formItems)
             {
                 var formInfoRestorer = new FormInfoRestorer(this);
-                using (var stream = item.OpenRead())
+                var snapshotPath = item.FullName + ".json";
+                if (File.Exists(snapshotPath))
                 {
+                    try
+                    {
+                        using var snapshotStream = File.OpenRead(snapshotPath);
+                        formInfoRestorer.LoadSnapshot(snapshotStream);
+                    }
+                    catch (Exception e)
+                    {
+                        logger.LogError(e, "读取窗口快照 {SnapshotPath} 失败，将回退到 XML 窗口文件", snapshotPath);
+                    }
+                }
+                if (!formInfoRestorer.HasSnapshot)
+                {
+                    using var stream = item.OpenRead();
                     formInfoRestorer.Load(stream);
                 }
-                var restoredForm = formInfoRestorer.Restore();
+                UserFormDataType restoredForm;
+                try
+                {
+                    restoredForm = formInfoRestorer.Restore();
+                }
+                catch (Exception e) when (formInfoRestorer.HasSnapshot)
+                {
+                    logger.LogError(e, "根据窗口快照恢复 {FormPath} 失败，将回退到 XML 窗口文件", item.FullName);
+                    formInfoRestorer = new FormInfoRestorer(this);
+                    using var stream = item.OpenRead();
+                    formInfoRestorer.Load(stream);
+                    restoredForm = formInfoRestorer.Restore();
+                }
                 ids.Add(restoredForm.Id);
             }
             foreach (var item in itemsInFolder)
@@ -699,6 +729,137 @@ namespace OpenEpl.TextECode
                 fileName = Directory.GetFiles(resourcePath, $"{name}.*").First();
             }
             return fileName;
+        }
+
+        private void ApplyPendingFormSnapshotClassAssociations()
+        {
+            if (PendingFormSnapshots.Count == 0)
+            {
+                return;
+            }
+
+            var classesByName = Classes
+                .Where(x => !string.IsNullOrEmpty(x.Name))
+                .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var pending in PendingFormSnapshots)
+            {
+                if (pending.FormInfo.Class != 0 || string.IsNullOrEmpty(pending.AssociatedClassName))
+                {
+                    continue;
+                }
+                if (!classesByName.TryGetValue(pending.AssociatedClassName, out var classElem))
+                {
+                    logger.LogWarning("无法根据快照关联窗口程序集，未找到类 {ClassName}", pending.AssociatedClassName);
+                    continue;
+                }
+                if (classElem.FormDataType != null && classElem.FormDataType != pending.FormDataType)
+                {
+                    logger.LogWarning("窗口程序集 {ClassName} 已关联到其他窗口，忽略快照中的关联信息", pending.AssociatedClassName);
+                    continue;
+                }
+
+                classElem.FormDataType = pending.FormDataType;
+                pending.FormDataType.SetFormClassId(classElem.Id);
+            }
+        }
+
+        private void ApplyPendingFormSnapshotEventBindings()
+        {
+            if (PendingFormSnapshots.Count == 0)
+            {
+                return;
+            }
+
+            var classesById = Classes.ToDictionary(x => x.Id);
+            foreach (var pending in PendingFormSnapshots)
+            {
+                if (pending.FormInfo.Class == 0 || !classesById.TryGetValue(pending.FormInfo.Class, out var classElem))
+                {
+                    if (pending.ControlEventBindings.Count != 0 || pending.MenuEventBindings.Count != 0)
+                    {
+                        logger.LogWarning("无法应用窗口 {FormName} 的事件快照，未找到关联的窗口程序集", pending.FormInfo.Name);
+                    }
+                    continue;
+                }
+
+                var methodNameMap = classElem.Methods
+                    .Where(x => !string.IsNullOrEmpty(x.Name))
+                    .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(x => x.Key, x => x.First().Id, StringComparer.OrdinalIgnoreCase);
+                var elementMap = pending.FormInfo.Elements.ToDictionary(x => x.Id);
+
+                foreach (var bindingGroup in pending.ControlEventBindings.GroupBy(x => x.ElementId))
+                {
+                    if (!elementMap.TryGetValue(bindingGroup.Key, out var element) || element is not FormControlInfo control)
+                    {
+                        continue;
+                    }
+                    var events = new List<KeyValuePair<int, int>>();
+                    foreach (var binding in bindingGroup)
+                    {
+                        if (!methodNameMap.TryGetValue(binding.HandlerMethodName, out var methodId))
+                        {
+                            logger.LogWarning("无法为窗口控件 {ControlName} 关联事件处理子程序 {MethodName}", control.Name, binding.HandlerMethodName);
+                            continue;
+                        }
+                        var eventKey = ResolveEventKey(control.DataType, binding.EventName, binding.EventKey);
+                        events.Add(new KeyValuePair<int, int>(eventKey, methodId));
+                    }
+                    control.Events = events.ToArray();
+                }
+
+                foreach (var binding in pending.MenuEventBindings)
+                {
+                    if (!elementMap.TryGetValue(binding.ElementId, out var element) || element is not FormMenuInfo menu)
+                    {
+                        continue;
+                    }
+                    if (!methodNameMap.TryGetValue(binding.HandlerMethodName, out var methodId))
+                    {
+                        logger.LogWarning("无法为菜单 {MenuName} 关联事件处理子程序 {MethodName}", menu.Name, binding.HandlerMethodName);
+                        continue;
+                    }
+                    menu.ClickEvent = methodId;
+                }
+            }
+        }
+
+        private int ResolveEventKey(int dataType, string eventName, int fallbackEventKey)
+        {
+            if (string.IsNullOrEmpty(eventName))
+            {
+                return fallbackEventKey;
+            }
+
+            EplSystemId.DecomposeLibDataTypeId(dataType, out var lib, out var type);
+            var dataTypeInfo = ELibs.ElementAtOrDefault(lib)?.DataTypes.ElementAtOrDefault(type);
+            if (dataTypeInfo == null || dataTypeInfo.Events.IsDefaultOrEmpty)
+            {
+                return fallbackEventKey;
+            }
+            var events = dataTypeInfo.Events;
+
+            if (fallbackEventKey > 0 && fallbackEventKey <= events.Length
+                && string.Equals(events[fallbackEventKey - 1].Name, eventName, StringComparison.Ordinal))
+            {
+                return fallbackEventKey;
+            }
+            if (fallbackEventKey >= 0 && fallbackEventKey < events.Length
+                && string.Equals(events[fallbackEventKey].Name, eventName, StringComparison.Ordinal))
+            {
+                return fallbackEventKey;
+            }
+
+            for (int i = 0; i < events.Length; i++)
+            {
+                if (string.Equals(events[i].Name, eventName, StringComparison.Ordinal))
+                {
+                    return i + 1;
+                }
+            }
+            return fallbackEventKey;
         }
     }
 }
